@@ -1,6 +1,6 @@
-from deploy-infra.bin.client_locate import EC2Client
-from deploy-infra.ec2.vpc import VPC
-from deploy-infra.config.config import LOG
+from deploy_infra.bin.client_locate import EC2Client
+from deploy_infra.ec2.vpc import VPC
+from deploy_infra.config.config import LOG
 import time
 
 profile_name = "Your aws profile name"  # first need to setup aws cli config with profile name
