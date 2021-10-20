@@ -1,0 +1,151 @@
+from src.client_locate import EC2Client
+from collections import defaultdict
+
+
+class Var:
+    def __init__(self, client):
+        self._client = client
+        """ :type : pyboto3.ec2 """
+
+    def convert_list_to_dict(self, list1, list2):
+        result = defaultdict(list)
+        for key, value in zip(list1, list2):
+            result[key].append(value)
+        return dict(result)
+
+    @staticmethod
+    def get_all_route_id_lists():
+        profiles = ['kbz-security-sso', 'sap-prod-sso', 'kbz-crayon-sso', 'kbz-temenos-i-sso', 'kbz-kbzt-sso']
+        routes = []
+        for profile in profiles:
+            clients = EC2Client(profile).get_client()
+            call_vars = Var(clients)
+            try:
+                route_id = call_vars.get_all_route_table_id_lists_via_vpc_id()
+                for key in range(len(route_id)):
+                    for route in route_id[key]:
+                        routes.append(route)
+            except Exception as e:
+                print(e, profile)
+            continue
+        return routes
+
+    def get_replace_gateway_id(self, current_route_id, from_gw, to_gw):
+        routes, route_name = Var.get_route_list(self, current_route_id)
+        route_list = dict(routes)
+        replace_route = []
+        tgw_id = []
+        cidr_ips = []
+        for key in route_list:
+            if from_gw == key:
+
+                cidr_ip = route_list[key]
+                for x in range(len(cidr_ip)):
+                    tgw_id.append(to_gw)
+                    cidr_ips.append(cidr_ip[x])
+        tgw_ip = Var.convert_list_to_dict(self, tgw_id, cidr_ip)
+        return tgw_ip, route_name
+
+    def get_route_table_id_lists_via_vpc_id(self, u_vpc_id):
+        response = self._client.describe_route_tables()
+        routeid_lists = []
+        vpcid_lists = []
+        for x in range(len(response['RouteTables'])):
+            # route_id = ([response['RouteTables'][x]['RouteTableId']])
+            route_id = response['RouteTables'][x]['RouteTableId']
+            routeid_lists.append(route_id)
+            vpc_id = response['RouteTables'][x]['VpcId']
+            vpcid_lists.append(vpc_id)
+
+        vgw_route_id = Var.convert_list_to_dict(self, vpcid_lists, routeid_lists)
+        for key in vgw_route_id:
+            if u_vpc_id in key:
+                r_route_id = (vgw_route_id[key])
+        return r_route_id
+
+    def get_all_route_table_id_lists_via_vpc_id(self):
+        response = self._client.describe_route_tables()
+        routeid_lists = []
+        vpcid_lists = []
+        r_route_id_lists = []
+        for x in range(len(response['RouteTables'])):
+            # route_id = ([response['RouteTables'][x]['RouteTableId']])
+            route_id = response['RouteTables'][x]['RouteTableId']
+            routeid_lists.append(route_id)
+            vpc_id = response['RouteTables'][x]['VpcId']
+            vpcid_lists.append(vpc_id)
+
+        vgw_route_id = Var.convert_list_to_dict(self, vpcid_lists, routeid_lists)
+        for key in vgw_route_id:
+            r_route_id = (vgw_route_id[key])
+            r_route_id_lists.append(r_route_id)
+        return r_route_id_lists
+
+    def get_route_list(self, route_id):
+        cidrip = []
+        gateway_id = []
+        cidr_ip = []
+        response = self._client.describe_route_tables(Filters=[{'Name': 'route-table-id', 'Values': [route_id]}])[
+            "RouteTables"]
+        route_name = response[0]["Tags"][0]['Value']
+        for result in response:
+            for i in range(len(result['Routes'])):
+                ip = result['Routes'][i]
+                cidrip.append(ip)
+
+        for x in range(len(cidrip)):
+            re = cidrip[x]
+            lnn = []
+            for key in cidrip[x]:
+                eee = re[key]
+                lnn.append(eee)
+            cidr_ip.append(lnn[0])
+            gateway_id.append(lnn[1])
+        routes = Var.convert_list_to_dict(self, gateway_id, cidr_ip)
+        return routes, route_name
+
+    def get_route_table_associate_subnet_lists(self, current_route_id):
+        response = self._client.describe_route_tables(
+            Filters=[{'Name': 'route-table-id', 'Values': [current_route_id]}])
+        assocate_lists = []
+        route_table_ids = []
+
+        for x in range(len(response["RouteTables"])):
+            route_table_name = response["RouteTables"][x]["Tags"][0]['Value']
+            association = response["RouteTables"][x]['Associations']
+            route_table_id = response["RouteTables"][x]['RouteTableId']
+            route_table_ids.append(route_table_id)
+            subnet_ids = []
+            route_ids = []
+            dis_associate_id = []
+            for i in range(len(association)):
+                if 'RouteTableAssociationId' in association[i]:
+                    dis_associate_id.append(association[i]['RouteTableAssociationId'])
+                else:
+                    print("no association")
+                if 'SubnetId' in association[i]:
+                    subnet_id = response["RouteTables"][x]['Associations'][i]['SubnetId']
+                    subnet_ids.append(subnet_id)
+
+                elif 'SubnetId' not in association[i]:
+                    subnet_ids.append('subnet-0x11111')
+            for y in range(len(subnet_ids)):
+                route_ids.append(route_table_id)
+            assocate_list = Var.convert_list_to_dict(self, route_ids, subnet_ids)
+            assocate_lists.append(assocate_list)
+
+        return assocate_list, dis_associate_id
+
+testing_uat_route = ['rtb-01a5ab52aef096e6d', 'rtb-08ceb6ab03d35fce8']
+uat_vpc_id = 'vpc-066cddaa51a8b4cec'
+vgw_uat_id = 'vgw-027c370d4845b24a8'
+igw_uat_id = 'igw-0a34ce57c6ccaee30'
+current_tgw_id = 'tgw-08e318cb343630d28'
+move_tgw_id = 'tgw-05baf94f1d281ed3e'
+
+profiles = ['kbz-kbzt-sso']
+for profile in profiles:
+    clients = EC2Client(profile).get_client()
+    call_vars = Var(clients)
+    response = call_vars.get_replace_gateway_id('rtb-08ceb6ab03d35fce8')
+    print(response)
